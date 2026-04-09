@@ -287,7 +287,7 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
         legend.text = element_text(size = legend_text_size),
         axis.title.y = element_text(face = "bold", size = axis_title_text_size, margin = margin(r = 10)),
         axis.title.x = element_text(face = "bold", size = axis_title_text_size, margin = margin(t = 10)),
-        axis.text.x = element_text(face = "bold", size = rel(rel_x_text_size)),
+        axis.text.x = element_markdown(face = "bold", size = rel(rel_x_text_size)),
         plot.caption = element_text(hjust = 0.5)
       )
       
@@ -404,7 +404,7 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
       
       if (taxa_levs == "Phylum") {
         
-        y_labels <- setNames(df_plot$feature_label3, df_plot$plot_order)
+        y_labels <- setNames(df_plot$feature_label2, df_plot$plot_order)
         
         plot_st <- plot_st +
           geom_text(
@@ -421,12 +421,12 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
             position = position_dodge(width = 0.8)
           ) +
           scale_y_discrete(labels = y_labels) +
-          theme(axis.text.y = element_text(face = "bold", size = axis_text_size))
+          theme(axis.text.y = element_markdown(face = "bold", size = axis_text_size))
         
         plot_mn <- plot_mn +
           scale_y_discrete(labels = y_labels, position = "right") +
           theme(
-            axis.text.y.right = element_text(face = "bold", size = axis_text_size),
+            axis.text.y.right = element_markdown(face = "bold", size = axis_text_size),
             legend.position = "none"
           )
       }
