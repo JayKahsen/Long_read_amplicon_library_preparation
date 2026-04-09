@@ -1,31 +1,47 @@
-################################### SETUP #####################################
+###############################################################################
+message("1 # SETUP")
+###############################################################################
 
-# Load global settings and helper functions
-source(paste0(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)), '/_globalStuff.R'))
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
 
-# Script Title & Output Folders
-script_title <- 'alpha_diversity'
+source(file.path(get_script_dir(), "_globalStuff.R"))
 
-plot_set_order = c('standard','normalization')
+script_title <- "alpha_diversity"
+script_description <- "
+Creates Figure 3 and Figure 6 alpha-diversity outputs from the rarefied ASV matrix.
+Builds summary metrics, runs the active statistical tests, and writes figure outputs.
+"
 
-#============================== metric definitions =============================#
+plot_set_order <- c("standard", "normalization")
 
-selected_metric = metric_order = c(
-  'percent_Muri','percent_Propi','percent_Archaea',
-  'richness','evenness','shannon','n'
+selected_metric <- metric_order <- c(
+  "percent_Muri", "percent_Propi", "percent_Archaea",
+  "richness", "evenness", "shannon", "n"
 )
 
-# if(!exists('plot_set_order')){plot_set_order='none'}
+###############################################################################
+message("28 # END SETUP")
+###############################################################################
 
-################################## END SETUP ###################################
-
-################################### RUNS ######################################
+###############################################################################
+message("32 # RUNS")
+###############################################################################
 
 for(plot_set in plot_set_order){
-  
-  #==============================================================================#
+
+  ###############################################################################
   message('Plot-Set Outputs')
-  #==============================================================================#
+  ###############################################################################
   
   if(plot_set == 'standard'){
     normalization_order = c('fixed cycles')
@@ -73,33 +89,31 @@ for(plot_set in plot_set_order){
     )
   }
   
-  #==============================================================================#
+  ###############################################################################
   message('Dataset Selection')
-  #==============================================================================#
+  ###############################################################################
   
-  testing = make_new_data_files <- 'no'
-  make_new_data_files <- 'yes'
-  
-  starting_r <- 3  # Control starting dataset index
-  ending_r   <- 3  # Control ending dataset index
-  testing    = 4# run single dataset index
- 
-  
-  #==============================================================================#
+  make_new_data_files <- "yes"
+
+  starting_r <- 3
+  ending_r   <- 3
+  testing <- 3
+
+  ###############################################################################
   message('Data Processing Settings')
-  #==============================================================================#
+  ###############################################################################
   
-  use_custom_labels <- 'no' # can customize strip labels
+  use_custom_labels <- 'no'
   
-  #==============================================================================#
+  ###############################################################################
   message('Parameter Sets')
-  #==============================================================================#
+  ###############################################################################
   
   parameter_sets <- list(
     set1 = list(
       filter1_group = 'data_class',
       filter2_group = 'normalization',
-      x_axis_group  = 'temperature',   # what are we comparing
+      x_axis_group  = 'temperature',
       x_facet_group = 'sample_type',
       plot_group    = 'sample_type'
     ),
@@ -118,11 +132,6 @@ for(plot_set in plot_set_order){
       plot_group = 'sample_type'  
     )
   )
-  
-  #========================== Optional subgrouping (off) ========================#
-  # Run_Group = 'primer_set'
-  # Run_Group_order = 'Standard'
-  # Run_Group_order = primer_set_order
   
   ################################################################################
   message('113 # MAIN LOOP: DATASETS')
@@ -148,8 +157,6 @@ for(plot_set in plot_set_order){
       r = starting_r = ending_r = testing
       message('\trunning r= ', testing)
     }
-    
-    r = 1 # for manual testing
     
     for (r in starting_r:ending_r) {
       
@@ -814,6 +821,10 @@ for(plot_set in plot_set_order){
   } # end loop over lp (Loop_Group_order)
 } # end loop over plot_set (plot_set_order)
 
-################################## END RUNS ###################################
+###############################################################################
+message("817 # END RUNS")
+###############################################################################
 
-#################################### END ######################################
+###############################################################################
+message(paste("821 # FINISHED", script_title))
+###############################################################################

@@ -2,31 +2,42 @@
 message("1 # SETUP")
 ###############################################################################
 
-# Load global settings and helper functions
-source(paste0(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)), "/_globalStuff.R"))
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
 
-# Script Title & Output Folders
+source(file.path(get_script_dir(), "_globalStuff.R"))
+
 script_title <- "taxonomy"
+script_description <- "
+Creates Figure 2 taxonomy profile panels from the rarefied Phylum matrix.
+Writes the consolidated figure outputs for the standard doubleton workflow.
+"
 
-# NOTE: leaving as-is (you intentionally override the global plot_set_order)
 plot_set_order <- "standard"
 
 set_output()
 
 ###############################################################################
-message("15 # END SETUP")
+message("24 # END SETUP")
 ###############################################################################
 
 ###############################################################################
-message("17 # RUNS")
+message("28 # RUNS")
 ###############################################################################
-
-# NOTE: iterates once because plot_set_order is length-1 here
 for (plot_set in plot_set_order) {
-  
-  #==============================================================================#
+
+  ###############################################################################
   message("22 # Plot-set outputs")
-  #==============================================================================#
+  ###############################################################################
   
   if (plot_set == "standard") {
     normalization_order <- c("fixed cycles")
@@ -50,24 +61,22 @@ for (plot_set in plot_set_order) {
     data_class_name     <- paste(data_class_order, collapse = "_")
   }
   
-  #==============================================================================#
+  ###############################################################################
   message("44 # Dataset selection")
-  #==============================================================================#
+  ###############################################################################
   
-  starting_r <- 1  # Control starting dataset index
-  ending_r   <- 1  # Control ending dataset index
+  starting_r <- 1
+  ending_r   <- 1
+  testing    <- "yes"
+  testing_r  <- 1
+  selected_data_class      <- "doubleton"
+  selected_data_class_name <- paste(selected_data_class, collapse = "_")
   
-  testing   <- "yes"
-  testing_r <- 1    # run single dataset index
-  
-  selected_data_class      <- "doubleton" # adding filter by
-  selected_data_class_name <- paste(selected_data_class, collapse = "_") # modified p_title # 122
-  
-  #==============================================================================#
+  ###############################################################################
   message("56 # Data processing / variable sets")
-  #==============================================================================#
+  ###############################################################################
   
-  use_custom_labels    <- "no" # can customize strip labels
+  use_custom_labels    <- "no"
   min_rel_abun_percent <- 0.1
   
   parameter_sets <- list(
@@ -94,10 +103,6 @@ for (plot_set in plot_set_order) {
     )
   )
   
-  #========================== Optional subgrouping (off) ========================#
-  # Run_Group = "primer_set" # will make separate runs for each value in subgroup_order
-  # Run_Group_order = "Standard"
-  
   ###############################################################################
   message("82 # MAIN LOOP: PROCESS DATASETS")
   ###############################################################################
@@ -123,8 +128,6 @@ for (plot_set in plot_set_order) {
       r <- starting_r <- ending_r <- testing_r
       message(paste0("\trunning r= ", testing_r))
     }
-    
-    r <- 1 # for manual testing
     
     for (r in starting_r:ending_r) {
       
@@ -255,8 +258,18 @@ for (plot_set in plot_set_order) {
         mutate(feature_label = factor(feature_label, levels = unique(feature_label))) %>%
         ungroup()
       
-      feature_colors <- palette_common[seq_len(length(unique(df_plot$feature_label)))]
-      names(feature_colors) <- unique(df_plot$feature_label)
+      phylum_order <- levels(df_plot$feature_label)
+      feature_colors <- setNames(palette_common[seq_along(phylum_order)], phylum_order)
+
+      if ("Unassigned" %in% names(feature_colors)) {
+        light_gray_index <- which(feature_colors %in% c(palette_gray[1], palette_gray[2]))
+        if (length(light_gray_index) > 0) {
+          light_gray_name <- names(feature_colors)[light_gray_index[1]]
+          light_gray_value <- feature_colors[light_gray_name]
+          feature_colors[light_gray_name] <- feature_colors["Unassigned"]
+          feature_colors["Unassigned"] <- light_gray_value
+        }
+      }
       
       #==============================================================================#
       message("226 # Generate Plots")
@@ -422,10 +435,6 @@ for (plot_set in plot_set_order) {
       message("349 # legend extraction")
       #==============================================================================#
       
-      library(cowplot)
-      library(patchwork)
-      library(grid)
-      
       legend_grob <- get_legend(plot_legend)
       
       legend_plot <- ggplot() +
@@ -480,5 +489,5 @@ message("397 # END RUNS")
 ###############################################################################
 
 ###############################################################################
-message("401 # END")
+message(paste("401 # FINISHED", script_title))
 ###############################################################################

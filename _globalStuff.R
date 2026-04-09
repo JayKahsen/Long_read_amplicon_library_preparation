@@ -1,33 +1,61 @@
-rm(list = ls())
+###############################################################################
+message("1 # SETUP")
+###############################################################################
+
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
+
+script_title <- "global"
+script_description <- "
+Shared setup for the long-read amplicon balancing workflow.
+Loads helper functions, required libraries, data tables, palette objects,
+factor orders, and common plotting wrappers used by the run-first and figure scripts.
+"
+
 set.seed(20240725)
 options(scipen = 999)
-
-################################### SETUP #####################################
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+.libPaths(unique(c("C:/_Repositories/R_libs", .libPaths())))
 
 ext_list <- c("png", "pdf", "svg")
-dpi      <- 300
+dpi <- 300
 
-wd             <- dirname(normalizePath(rstudioapi::getSourceEditorContext()$path))
+wd <- get_script_dir()
 project_folder <- basename(wd)
 setwd(wd)
 
-source("helperJ.R")
+source(file.path(wd, "helperJ.R"))
 
 required_libraries <- c(
   "tidyverse",
   "vegan",
   "compositions",
   "patchwork",
+  "cowplot",
   "ggh4x",
-  "ggtext"
+  "ggtext",
+  "openxlsx"
 )
 
 load_libraries(required_libraries)
 qPrint(project_folder)
 
-################################## END SETUP ###################################
+###############################################################################
+message("44 # END SETUP")
+###############################################################################
 
-################################## LOAD FILES ##################################
+###############################################################################
+message("48 # LOAD FILES")
+###############################################################################
 
 qLoad("data_tables/meta.csv")
 qLoad("data_tables/matrix_names.csv")
@@ -38,12 +66,16 @@ if (exists("meta")) {
   qPrint(meta_names)
 }
 
-################################ END LOAD FILES ################################
+###############################################################################
+message("60 # END LOAD FILES")
+###############################################################################
 
-################################### VARIABLES ##################################
+###############################################################################
+message("64 # VARIABLES")
+###############################################################################
 
-taxa_levels <- c("Phylum", "Genus", "Species", "ASV")
-taxa_plural <- c("Phyla", "Genera", "Species", "ASVs")
+taxa_levels <- c("Phylum", "Genus", "ASV")
+taxa_plural <- c("Phyla", "Genera", "ASVs")
 
 if (exists("matrix_names")) {
   data_set_order <- data_sets <- unique(matrix_names$data_sets)
@@ -51,9 +83,13 @@ if (exists("matrix_names")) {
 
 set_output()
 
-################################ END VARIABLES #################################
+###############################################################################
+message("76 # END VARIABLES")
+###############################################################################
 
-#################################### ORDERS ####################################
+###############################################################################
+message("80 # ORDERS")
+###############################################################################
 
 plate_order <- paste0("plate_", 1:7)
 
@@ -76,9 +112,13 @@ cycle            <- 1:24
 plot_cycle_order <- paste0("cycle_", str_pad(cycle, width = 2, side = "left", pad = "0"))
 plot_cycle_order
 
-################################## END ORDERS ##################################
+###############################################################################
+message("103 # END ORDERS")
+###############################################################################
 
-################################### PALETTES ###################################
+###############################################################################
+message("107 # PALETTES")
+###############################################################################
 
 palette_gray   <- rev(c("#BBBBBB", "#999999", "#777777", "#555555", "#333333"))
 palette_green  <- rev(c("#D2EDB2", "#89C189", "#60A740", "#107810", "#004B00"))
@@ -304,15 +344,17 @@ palette_linetype <- c(
   "Zymo" = "dashed"
 )
 
+###############################################################################
+message("334 # END PALETTES")
+###############################################################################
 
-################################# END PALETTES #################################
-
-#################################### THEMES ####################################
+###############################################################################
+message("338 # THEMES")
+###############################################################################
 
 margin_size <- 10
 
 theme_global <- function(base_size = 11, magnify = 1) {
-  # Example: theme_common <- theme_global()
   theme_gray(base_size = base_size) +
     theme(
       plot.margin = margin(margin_size, margin_size, margin_size, margin_size),
@@ -337,7 +379,6 @@ theme_plot <- theme(
 )
 
 gPlot <- function(p) {
-  # Example: p <- gPlot(p)
   p <- p +
     scale_fill_manual(values = palette_color, labels = palette_label) +
     scale_color_manual(values = palette_color, labels = palette_label) +
@@ -347,9 +388,13 @@ gPlot <- function(p) {
   p
 }
 
-################################## END THEMES ##################################
+###############################################################################
+message("378 # END THEMES")
+###############################################################################
 
-##################################### END ######################################
+###############################################################################
+message(paste("382 # FINISHED", script_title))
+###############################################################################
 
 cite_R(required_libraries)
 

@@ -2,42 +2,51 @@
 message("1 # SETUP")
 ###############################################################################
 
-# Load global settings and helper functions
-source(paste0(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)), "/_globalStuff.R"))
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
 
-# Script Title & Output Folders
+source(file.path(get_script_dir(), "_globalStuff.R"))
+
 script_title <- "pipeline"
+script_description <- "
+Creates Figure 5 workflow outputs from the rarefied ASV matrix.
+Builds read-retention summaries, compositional metrics, and combined figure outputs.
+"
 
 set_output()
 
-# Run knobs
-plot_set_order      <- c("normalization")  # c("standard","normalization","data_class")
-make_new_data_files <- "yes"              # "yes" to rebuild + cache, "no" to load cached
-testing             <- "yes"              # "yes" runs only testing_r
-testing_r           <- 1                  # the script does not use the counts data but it could
+plot_set_order      <- c("normalization")
+make_new_data_files <- "yes"
+testing             <- "yes"
+testing_r           <- 3
 starting_r          <- 3
 ending_r            <- 3
 
 use_custom_labels <- "no"
 
 ###############################################################################
-message("20 # END SETUP")
+message("28 # END SETUP")
 ###############################################################################
 
 ###############################################################################
-message("22 # RUNS")
+message("32 # RUNS")
 ###############################################################################
-
-if (!exists("plot_set_order")) {
-  plot_set_order <- "none"
-}
 
 for (plot_set in plot_set_order) {
   qPrint(plot_set)
-  
-  #==============================================================================#
+
+  ###############################################################################
   message("30 # Plot-set outputs")
-  #==============================================================================#
+  ###############################################################################
   
   folder <- plot_set
   
@@ -65,9 +74,9 @@ for (plot_set in plot_set_order) {
     figure_title        <- "Figure X"
   }
   
-  #==============================================================================#
+  ###############################################################################
   message("56 # Parameter sets")
-  #==============================================================================#
+  ###############################################################################
   
   parameter_sets <- list(
     set1 = list(
@@ -84,9 +93,9 @@ for (plot_set in plot_set_order) {
     )
   )
   
-  #==============================================================================#
+  ###############################################################################
   message("72 # Metrics setup")
-  #==============================================================================#
+  ###############################################################################
   
   message("74 # metrics set up")
   
@@ -253,9 +262,9 @@ for (plot_set in plot_set_order) {
         
         feature_names <- names(matrix_df)
         
-        #==============================================================================#
+        ###############################################################################
         message("228 # Taxa percentages and Zymo score")
-        #==============================================================================#
+        ###############################################################################
         
         message("230 # get percent Archaea and other taxa of interest")
         
@@ -663,5 +672,5 @@ message("673 # END RUNS")
 ###############################################################################
 
 ###############################################################################
-message("677 # END")
+message(paste("677 # FINISHED", script_title))
 ###############################################################################

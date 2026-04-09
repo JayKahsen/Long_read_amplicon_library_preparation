@@ -1641,6 +1641,40 @@ qLoad <- function(file_path) {
     message("\tFile successfully loaded:\t", basename(file_path))
   }
 }
+
+write_formatted_excel <- function(df, file_path, sheet_name = "Sheet1") {
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb, sheet_name)
+  openxlsx::writeData(wb, sheet = sheet_name, x = df, withFilter = TRUE)
+
+  header_style <- openxlsx::createStyle(
+    textDecoration = "bold",
+    halign = "center",
+    valign = "center"
+  )
+
+  body_style <- openxlsx::createStyle(
+    halign = "center",
+    valign = "center"
+  )
+
+  openxlsx::addStyle(
+    wb, sheet = sheet_name, style = header_style,
+    rows = 1, cols = seq_len(ncol(df)), gridExpand = TRUE, stack = TRUE
+  )
+
+  if (nrow(df) > 0) {
+    openxlsx::addStyle(
+      wb, sheet = sheet_name, style = body_style,
+      rows = 2:(nrow(df) + 1), cols = seq_len(ncol(df)),
+      gridExpand = TRUE, stack = TRUE
+    )
+  }
+
+  openxlsx::freezePane(wb, sheet = sheet_name, firstRow = TRUE)
+  openxlsx::setColWidths(wb, sheet = sheet_name, cols = seq_len(ncol(df)), widths = "auto")
+  openxlsx::saveWorkbook(wb, file = file_path, overwrite = TRUE)
+}
 ################################################################################
 # creates directory from filepath... checks existence first
 ################################################################################

@@ -1,24 +1,44 @@
-################################### SETUP #####################################
+###############################################################################
+message("1 # SETUP")
+###############################################################################
 
-# Load global settings and helper functions
-source(paste0(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)), "/_globalStuff.R"))
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
 
-# Script Title & Output Folders
-script_title   <- "abundance"
+source(file.path(get_script_dir(), "_globalStuff.R"))
+
+script_title <- "abundance"
+script_description <- "
+Creates Figure 8 abundance outputs from the rarefied Phylum matrix.
+Runs the phylum-level comparisons and writes the combined abundance figures.
+"
 
 set_output()
 
 plot_set_order <- c("normalization")
 
-if (!exists("plot_set_order")) plot_set_order <- "none"
+###############################################################################
+message("24 # END SETUP")
+###############################################################################
 
-################################## END SETUP ###################################
-
-################################### RUNS ######################################
+###############################################################################
+message("28 # RUNS")
+###############################################################################
 
 for (plot_set in plot_set_order) { qPrint(plot_set)
-  
-  #============================== Plot-set outputs ==============================#
+
+  ###############################################################################
+  message("36 # Plot-set outputs")
+  ###############################################################################
   
   df_matrix <- NULL
   
@@ -44,7 +64,9 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
     data_class_name     <- paste(data_class_order, collapse = "_")
   }
   
-  #============================= Dataset selection ==============================#
+  ###############################################################################
+  message("58 # Dataset selection")
+  ###############################################################################
   
   starting_r <- 1
   ending_r   <- 1
@@ -53,13 +75,17 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
   
   selected_data_class      <- "doubleton"
   selected_data_class_name <- paste(selected_data_class, collapse = "_")
-  zoom <- 2 # log2 limits
+  zoom <- 2
   
-  #=========================== Data processing settings =========================#
+  ###############################################################################
+  message("68 # Data processing settings")
+  ###############################################################################
   
   use_custom_labels <- "no"
   
-  #============================= Parameter sets =================================#
+  ###############################################################################
+  message("74 # Parameter sets")
+  ###############################################################################
   
   parameter_sets <- list(
     set1 = list(
@@ -102,8 +128,6 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
       r <- starting_r <- ending_r <- testing_r
       message("\trunning r= ", testing_r)
     }
-    
-    r <- 1 # for manual testing
     
     for (r in starting_r:ending_r) {
       
@@ -167,12 +191,6 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
         select(which(colSums(.) > 0))
       
       feature_names <- names(df_matrix)
-      
-      # df_sample_counts <- df_matrix %>%
-      #   mutate(sample_counts = rowSums(df_matrix)) %>%
-      #   xPlode_sample_name() %>%
-      #   select(-any_of(feature_names)) %>%
-      #   select(sample_counts, everything())
       
       #============================== Statistical tests ==========================#
       
@@ -443,9 +461,13 @@ for (plot_set in plot_set_order) { qPrint(plot_set)
   } # end loop over lp
 } # end loop over plot_set
 
-################################## END RUNS ###################################
+###############################################################################
+message("446 # END RUNS")
+###############################################################################
 
-#################################### END ######################################
+###############################################################################
+message(paste("450 # FINISHED", script_title))
+###############################################################################
 
 #============================= meta summary table ==============================#
 

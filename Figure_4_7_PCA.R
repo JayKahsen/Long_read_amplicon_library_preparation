@@ -1,24 +1,42 @@
-################################### SETUP #####################################
+###############################################################################
+message("1 # SETUP")
+###############################################################################
 
-# Load global settings and helper functions
-source(paste0(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)), '/_globalStuff.R'))
+get_script_dir <- function() {
+  cmd_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", cmd_args, value = TRUE)
+  if (length(file_arg) > 0) {
+    return(dirname(normalizePath(sub("^--file=", "", file_arg[1]))))
+  }
+  if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+    return(dirname(normalizePath(rstudioapi::getSourceEditorContext()$path)))
+  }
+  getwd()
+}
 
-# Script Title & Output Folders
-script_title <- 'PCA'
+source(file.path(get_script_dir(), "_globalStuff.R"))
 
-plot_set_order = c('standard','normalization')
+script_title <- "PCA"
+script_description <- "
+Creates Figure 4 and Figure 7 PCA outputs from the rarefied ASV matrix.
+Calculates ordinations, permDISP, and PERMANOVA summaries for the active workflows.
+"
 
-################################## END SETUP ###################################
+plot_set_order <- c("standard", "normalization")
 
-################################### RUNS ######################################
+###############################################################################
+message("24 # END SETUP")
+###############################################################################
 
-if(!exists('plot_set_order')){plot_set_order='none'}
+###############################################################################
+message("28 # RUNS")
+###############################################################################
 
 for(plot_set in plot_set_order){ qPrint(plot_set)
-  
-  #==============================================================================#
+
+  ###############################################################################
   message('Plot-Set Parameters')
-  #==============================================================================#
+  ###############################################################################
   
   if(plot_set == 'standard'){
     normalization_order = c('fixed cycles')
@@ -43,27 +61,25 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
     data_class_name     = paste(data_class_order, collapse = '_')
   }
   
-  #==============================================================================#
+  ###############################################################################
   message('Dataset Selection')
-  #==============================================================================#
+  ###############################################################################
   
-  starting_r <- 4
-  ending_r   <- 4
+  starting_r <- 3
+  ending_r   <- 3
   testing    = 'yes'
-  testing_r  = 4
+  testing_r  = 3
   
   number_of_permutations = 999
-  # number_of_permutations = 2
-  
-  #==============================================================================#
+  ###############################################################################
   message('Data Processing Settings')
-  #==============================================================================#
+  ###############################################################################
   
-  use_custom_labels <- 'no' # can customize strip labels
+  use_custom_labels <- 'no'
   
-  #==============================================================================#
+  ###############################################################################
   message('Parameter Sets')
-  #==============================================================================#
+  ###############################################################################
   
   parameter_sets <- list(
     set1 = list(
@@ -110,8 +126,6 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
       r = starting_r = ending_r = testing_r
       message('\trunning r= ', testing_r)
     }
-    
-    r = 1 # for manual testing
     
     for (r in starting_r:ending_r) {
       
@@ -750,8 +764,6 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
       message('691 # COMBINE + SAVE')
       ################################################################################
       
-      library(patchwork)
-      
       height_ratios = c(15, 2, 3)
       height_adj = 2
       if(plot_set == 'standard'){      height_ratios = c(13, 2, 2); height_adj = 4/3 }
@@ -810,6 +822,10 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
   
 } # end loop over plot_set (plot_set_order)
 
-################################## END RUNS ###################################
+###############################################################################
+message("813 # END RUNS")
+###############################################################################
 
-#################################### END ######################################
+###############################################################################
+message(paste("817 # FINISHED", script_title))
+###############################################################################
