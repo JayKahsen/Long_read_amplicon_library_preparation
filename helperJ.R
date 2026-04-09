@@ -991,9 +991,9 @@ feature_labels <- function(group = 'feature', df = df_matrix,averaging_group='sa
     mutate(
       rel_abun_label = paste0(signif(100 * group_mean_rel_abun, 2), '%'),
       total_rel_abun_label = paste0(signif(100 * total_rel_abun, 2), '%'),
-      feature_label2 = paste0("<span style='color:", palette_color[Domain], "'><i>", feature_label, "</i> ", rel_abun_label, "</span>"),
+      feature_label2 = paste0("*", feature_label, "* ", rel_abun_label),
       feature_label3 = paste0(feature_label, ' ', signif(100 * group_mean_rel_abun, 2), '%'),
-      total_feature_label = paste0("<span style='color:", palette_color[Domain], "'><i>", feature_label, "</i> ", total_rel_abun_label, "</span>"),
+      total_feature_label = paste0("*", feature_label, "* ", total_rel_abun_label),
     ) %>%
     arrange(desc(group_mean_rel_abun)) %>%
     mutate(plot_order_test = factor(feature_label3, levels = rev(unique(feature_label3))))%>%
@@ -1021,9 +1021,15 @@ Kruskal_Mann_Whitney_Test <- function(df = df_matrix, testing_group = "y_axis_gr
   for (category in unique_categories) {
     category_df <- as.data.frame(category)
     category_str <- paste(category_df, collapse = "_")
-    
-    category_data1 <- dfx %>%
-      filter(across(all_of(category_group), ~ . %in% category))
+    category_vals <- as.list(category_df[1, , drop = TRUE])
+
+    keep_rows <- rep(TRUE, nrow(dfx))
+    for (i in seq_along(category_group)) {
+      keep_rows <- keep_rows & dfx[[category_group[i]]] == category_vals[[i]]
+    }
+
+    category_data1 <- dfx[keep_rows, , drop = FALSE]
+    rownames(category_data1) <- NULL
     
     # Prepare category columns for skipped rows
     category_columns <- as.list(category_df)
@@ -1724,7 +1730,7 @@ log10_labels_bold <- function(x) {
     if (is.na(val)) {
       return(NA)  # Return NA if the value is missing
     } else {
-      return(paste0("<b>10<sup>", val, "</sup></b>"))
+      return(paste0("10^", val))
     }
   })
 }
@@ -1733,7 +1739,7 @@ fold_change_labels_bold <- function(x) {
     if (is.na(val)) {
       return(NA)  # Return NA if the value is missing
     } else {
-      return(paste0("<b>2<sup>", (val), "</sup></b>"))
+      return(paste0("2^", val))
     }
   })
 }
@@ -1742,7 +1748,7 @@ sc_log10_labels_bold <- function(x) {
     if (is.na(val)) {
       return(NA)  # Return NA if the value is missing
     } else {
-      return(paste0("<b>10<sup>", (val-sc), "</sup></b>"))
+      return(paste0("10^", val - sc))
     }
   })
 }
@@ -1779,7 +1785,7 @@ log_labels_bold <- function(x) {
       return(NA)  # Return NA if the value is missing
     } else {
       exponent <- round(log10(val))
-      return(paste0("<b>10<sup>", exponent, "</sup></b>"))  # Apply bold to 10 and superscript to exponent
+      return(paste0("10^", exponent))
     }
   })
 }
@@ -1790,7 +1796,7 @@ log2_labels_bold <- function(x) {
       return(NA)  # Return NA if the value is missing
     } else {
       exponent <- round(log2(val))
-      return(paste0("<b>2<sup>", exponent, "</sup></b>"))  # Apply bold to 10 and superscript to exponent
+      return(paste0("2^", exponent))
     }
   })
 }

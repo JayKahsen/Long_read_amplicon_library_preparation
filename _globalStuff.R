@@ -43,6 +43,9 @@ required_libraries <- c(
   "cowplot",
   "ggh4x",
   "ggtext",
+  "markdown",
+  "litedown",
+  "svglite",
   "openxlsx"
 )
 
