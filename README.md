@@ -1,4 +1,4 @@
-# long_read_amplicon_balancing
+# Long_read_amplicon_library_preparation
 
 Reproducible R code and supporting data for the manuscript:
 
