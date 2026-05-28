@@ -285,7 +285,7 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
           print(formula_str)
           
           # Run adonis2 with renamed argument
-          res <- adonis2(formula_str, data = df_meta, permutations = 1000, by = method)
+          res <- adonis2(formula_str, data = df_meta, permutations = number_of_permutations, by = method)
           
           if (is.null(method)) method <- NA
           
@@ -317,7 +317,7 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
           bd <- betadisper(dist_matrix, group = df_meta[[grouping_var]], type = "median")
           
           # Run permutation test
-          perm_disp <- permutest(bd, permutations = 1000)
+          perm_disp <- permutest(bd, permutations = number_of_permutations)
           
           # Extract distances to median
           dist_to_median <- bd$distances
@@ -420,10 +420,15 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
       
       common_theme = theme(
         plot.background = element_rect(fill = palette_color['general_background']),
+        panel.background = element_rect(fill = palette_color["panel_background"]),
+        panel.grid.major.x = element_line(color = palette_color["gridline_major"], linewidth = 0.4),
+        panel.grid.major.y = element_line(color = palette_color["gridline_major"], linewidth = 0.4),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
         legend.background = element_rect(fill = palette_color['general_background']),
         legend.text = element_text(size = title_size),
-        axis.title.x = element_markdown(size = title_size, margin = margin(t = 10)),
-        axis.title.y = element_markdown(size = title_size),
+      axis.title.x = element_text(size = title_size, margin = margin(t = 10)),
+      axis.title.y = element_text(size = title_size),
         axis.text = element_text(size = text_size),
         plot.caption = element_text(hjust = 0, size = caption_size)
       )
@@ -558,7 +563,8 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
           mutate(short_name=factor(short_name,levels=unique(short_name))) %>% 
           group_by(short_name) %>% 
           mutate(fill = ifelse(as.integer(short_name) %% 2 == 1,'gray1','gray2'))%>% 
-          filter(!col%in% c('average_dist_median','formula')) %>% 
+          #filter(!col%in% c('average_dist_median','formula')) %>% 
+          filter(!col%in% c('formula')) %>% 
           ungroup() %>% 
           arrange(desc(short_name)) %>%
           mutate(short_name=factor(short_name,levels=unique(short_name)))
@@ -585,7 +591,13 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
           group_by(short_name) %>%
           mutate(fill = ifelse(as.integer(short_name) %% 2 == 1, 'gray1', 'gray2')) %>%
           filter(!col %in% c('method','formula')) %>%
-          ungroup()
+          ungroup() %>%
+          mutate(test_main = 'permANOVA') %>%
+          mutate(test_block = case_when(
+            filter_method == 'margin' ~ 'by Margin',
+            filter_method == 'terms' ~ 'by Term',
+            TRUE ~ 'test type'
+          ))
         
         if(plot_set == 'standard'){      df_anova_plot = df_anova_plot %>% filter(filter_method != 'onedf') }
         if(plot_set == 'normalization'){ df_anova_plot = df_anova_plot %>% filter(filter_method != 'onedf') }
@@ -593,7 +605,7 @@ for(plot_set in plot_set_order){ qPrint(plot_set)
         p = ggplot(df_anova_plot, aes(x = col, y = rev(test_name), fill = fill)) +
           geom_tile(aes(width = widths), color = "black") +
           geom_text(aes(label = paste(val))) +
-          facet_grid2(test ~ col, scales = "free", space = "free")
+          facet_nested(rows = vars(test_main, test_block), cols = vars(col), scales = "free", space = "free")
         
         plot_anova = tPlot(p)
         

@@ -19,8 +19,17 @@ source(file.path(get_script_dir(), "_globalStuff.R"))
 script_title <- "pipeline"
 script_description <- "
 Creates Figure 5 workflow outputs from the rarefied ASV matrix.
-Builds read-retention summaries, compositional metrics, and combined figure outputs.
+Builds read-retention summaries, compositional metrics, and combined figure outputs using Welch tests.
 "
+variant_suffix <- ""
+
+tidy_test_result <- function(test_obj) {
+  data.frame(
+    p.value = test_obj$p.value,
+    statistic = unname(test_obj$statistic)[1],
+    stringsAsFactors = FALSE
+  )
+}
 
 set_output()
 
@@ -33,6 +42,7 @@ ending_r            <- 3
 
 use_custom_labels <- "no"
 
+sample_type_order <- c("cumulative","Soil", "Feces", "Skin")
 ###############################################################################
 message("28 # END SETUP")
 ###############################################################################
@@ -43,7 +53,7 @@ message("32 # RUNS")
 
 for (plot_set in plot_set_order) {
   qPrint(plot_set)
-
+  
   ###############################################################################
   message("30 # Plot-set outputs")
   ###############################################################################
@@ -63,7 +73,8 @@ for (plot_set in plot_set_order) {
     data_class_order    <- c("doubleton")
     normalization_name  <- paste(normalization_order, collapse = "_")
     data_class_name     <- paste(data_class_order, collapse = "_")
-    figure_title        <- "Figure 5 Chimera Formation and Data Loss from Over Cycling"
+    figure_title        <- paste0("Figure 5 Chimera Formation and Data Loss from Over Cycling", variant_suffix)
+    summary_file_name   <- paste0("Figure_5_summary", variant_suffix, ".xlsx")
   }
   
   if (plot_set == "data_class") {
@@ -138,6 +149,17 @@ for (plot_set in plot_set_order) {
     "p_fastq_reads","p_trimmed_reads","p_filtered_reads","p_denoised_reads",
     "p_chimeric_reads","p_pentaton_reads","p_contaminant_reads","p_usable_reads"
   ))
+  
+  p_metric_numerator_map <- c(
+    "p_fastq_reads"       = "fastq_reads",
+    "p_trimmed_reads"     = "trimmed_reads",
+    "p_filtered_reads"    = "filtered_reads",
+    "p_denoised_reads"    = "denoised_reads",
+    "p_chimeric_reads"    = "chimeric_reads",
+    "p_pentaton_reads"    = "contaminant_table_reads",
+    "p_contaminant_reads" = "contaminant_reads",
+    "p_usable_reads"      = "usable_reads"
+  )
   
   metric_cumulative <- c(
     "c_fastq_reads","c_trimmed_reads","c_filtered_reads","c_denoised_reads",
@@ -317,6 +339,15 @@ for (plot_set in plot_set_order) {
           full_join(Muri_df,    by = "sample_name") %>%
           left_join(meta_SD, by = "sample_name") %>%
           rename_with(~ paste0("smp_", .x), .cols = any_of(c(metric_reads, metric_p_reads, metric_cumulative))) %>%
+          {
+            metrics_df_tmp <- .
+            for (p_metric in names(p_metric_numerator_map)) {
+              numerator_col <- paste0("smp_", p_metric_numerator_map[[p_metric]])
+              percent_col <- paste0("smp_", p_metric)
+              metrics_df_tmp[[percent_col]] <- 100 * metrics_df_tmp[[numerator_col]] / metrics_df_tmp[["smp_fastq_reads"]]
+            }
+            metrics_df_tmp
+          } %>%
           group_by(across(any_of(grouping_columns))) %>%
           mutate(across(starts_with("smp_"), ~ mean(., na.rm = TRUE), .names = "{sub('smp_', 'mean_', .col)}")) %>%
           rename_with(~ gsub("smp_", "", .), starts_with("ratio_smp_")) %>%
@@ -360,14 +391,31 @@ for (plot_set in plot_set_order) {
               unique_subgroups <- unique(.data[[x_axis_group]])
               
               if (length(unique_subgroups) != 2) {
-                list(data.frame(p.value = NA, statistic = NA))
+                list(data.frame(
+                  p.value = NA,
+                  statistic = NA,
+                  fully_separated = NA
+                ))
               } else {
                 subgroup_counts <- map(unique_subgroups, ~ n_distinct(.data$value[.data[[x_axis_group]] == .x]))
                 
                 if (any(unlist(subgroup_counts) == 1)) {
-                  list(data.frame(p.value = NA, statistic = NA))
+                  list(data.frame(
+                    p.value = NA,
+                    statistic = NA,
+                    fully_separated = NA
+                  ))
                 } else {
-                  list(broom::tidy(wilcox.test(value ~ .data[[x_axis_group]])))
+                  subgroup_values <- map(unique_subgroups, ~ .data$value[.data[[x_axis_group]] == .x])
+                  group1_values <- subgroup_values[[1]]
+                  group2_values <- subgroup_values[[2]]
+                  fully_separated_flag <- max(group1_values, na.rm = TRUE) < min(group2_values, na.rm = TRUE) |
+                    max(group2_values, na.rm = TRUE) < min(group1_values, na.rm = TRUE)
+                  
+                  list(
+                    tidy_test_result(t.test(value ~ .data[[x_axis_group]], var.equal = FALSE)) %>%
+                      mutate(fully_separated = fully_separated_flag)
+                  )
                 }
               }
             },
@@ -376,7 +424,7 @@ for (plot_set in plot_set_order) {
           unnest(t_test_summary)
         
         t_test_df <- t_test_results %>%
-          select(any_of(test_across), metric, p.value)
+          select(any_of(test_across), metric, p.value, fully_separated)
         
         join_by <- setNames(c(test_across, "metric"), c(test_across, "metric"))
         
@@ -407,6 +455,7 @@ for (plot_set in plot_set_order) {
           axis.text.y    = element_text(face = "plain")
         )
       
+      
       gPlot <- function(p) {
         p <- p +
           scale_color_manual(values = palette_color, labels = palette_label) +
@@ -416,13 +465,12 @@ for (plot_set in plot_set_order) {
             color = guide_legend(order = 1),
             fill  = guide_legend(
               order        = 2,
-              override.aes = list(shape = 22, size = 5, color = "black", alpha = 1)
+              override.aes = list(shape = 22, size = 6, color = "black", alpha = 1)
             )
           ) +
           labs(color = "", fill = "", title = "", x = "", y = "")
         p
       }
-      
       #==============================================================================#
       message("465 # Plotting loop")
       #==============================================================================#
@@ -434,6 +482,7 @@ for (plot_set in plot_set_order) {
         selected_metric_names <- get(smg)
         
         plot_list <- list()
+        plot_export_list <- list()
         list_category <- unique(result_df[[plot_group]])
         
         for (t in list_category) {
@@ -501,7 +550,8 @@ for (plot_set in plot_set_order) {
             summarize(mean_value = mean(value), .groups = "drop") %>%
             mutate(metric = ifelse(metric == "chimerireads", "chimeric_reads", metric)) %>%
             mutate(cumulative = "cumulative") %>%
-            mutate(metric = factor(metric, levels = unique(metric)))
+            mutate(metric = factor(metric, levels = unique(metric))) %>% 
+            mutate(cumulative = factor(cumulative, levels = sample_type_order))
           
           df_fastq <- df_plot %>%
             filter(metric %in% c("fastq_reads")) %>%
@@ -524,10 +574,376 @@ for (plot_set in plot_set_order) {
             ungroup() %>%
             mutate(metric = factor(metric, levels = unique(metric)))
           
+          percentage_sample_detail <- metrics_df %>%
+            select(
+              sample_name,
+              any_of(c(plot_group, x_facet_group, x_axis_group)),
+              smp_fastq_reads,
+              any_of(paste0("smp_", metric_p_reads)),
+              any_of(paste0("smp_", metric_reads))
+            ) %>%
+            pivot_longer(
+              cols = any_of(paste0("smp_", metric_p_reads)),
+              names_to = "percent_metric",
+              values_to = "point_value_percent"
+            ) %>%
+            mutate(
+              metric = gsub("^smp_p_", "", percent_metric),
+              reads_metric_col = case_when(
+                metric == "fastq_reads" ~ "smp_fastq_reads",
+                metric == "trimmed_reads" ~ "smp_trimmed_reads",
+                metric == "filtered_reads" ~ "smp_filtered_reads",
+                metric == "denoised_reads" ~ "smp_denoised_reads",
+                metric == "chimeric_reads" ~ "smp_chimeric_reads",
+                metric == "pentaton_reads" ~ "smp_contaminant_table_reads",
+                metric == "contaminant_reads" ~ "smp_contaminant_reads",
+                metric == "usable_reads" ~ "smp_usable_reads",
+                TRUE ~ NA_character_
+              )
+            ) %>%
+            rowwise() %>%
+            mutate(point_value_reads = get(reads_metric_col)) %>%
+            ungroup() %>%
+            transmute(
+              sample_name = sample_name,
+              !!plot_group := .data[[plot_group]],
+              !!x_facet_group := .data[[x_facet_group]],
+              !!x_axis_group := .data[[x_axis_group]],
+              metric = metric,
+              point_value_percent = point_value_percent,
+              point_value_reads = point_value_reads,
+              sample_fastq_reads = smp_fastq_reads
+            )
+          
+          fastq_sample_detail <- df_fastq %>%
+            transmute(
+              sample_name = sample_name,
+              !!plot_group := .data[[plot_group]],
+              !!x_facet_group := .data[[x_facet_group]],
+              !!x_axis_group := .data[[x_axis_group]],
+              metric = "fastq_reads",
+              point_value_percent = relative_fastq_reads,
+              point_value_reads = value,
+              sample_fastq_reads = value
+            )
+          
+          sample_point_base <- bind_rows(
+            percentage_sample_detail,
+            fastq_sample_detail
+          )
+          
+          vector_summary_by_normalization <- sample_point_base %>%
+            mutate(
+              p_metric = factor(paste0("p_", metric), levels = metric_p_reads),
+              metric_label = palette_label[as.character(p_metric)]
+            ) %>%
+            group_by(normalization = .data[[x_axis_group]], p_metric, metric_label) %>%
+            summarize(
+              n = dplyr::n(),
+              mean_percent = mean(point_value_percent, na.rm = TRUE),
+              sd_percent = sd(point_value_percent, na.rm = TRUE),
+              min_percent = min(point_value_percent, na.rm = TRUE),
+              max_percent = max(point_value_percent, na.rm = TRUE),
+              range_percent = paste0(signif(min_percent, 4), " to ", signif(max_percent, 4)),
+              .groups = "drop"
+            ) %>%
+            arrange(normalization, p_metric)
+
+          vector_summary_by_normalization_sample_type <- sample_point_base %>%
+            mutate(
+              p_metric = factor(paste0("p_", metric), levels = metric_p_reads),
+              metric_label = palette_label[as.character(p_metric)]
+            ) %>%
+            group_by(
+              normalization = .data[[x_axis_group]],
+              sample_type = .data[[plot_group]],
+              p_metric,
+              metric_label
+            ) %>%
+            summarize(
+              n = dplyr::n(),
+              mean_percent = mean(point_value_percent, na.rm = TRUE),
+              sd_percent = sd(point_value_percent, na.rm = TRUE),
+              min_percent = min(point_value_percent, na.rm = TRUE),
+              max_percent = max(point_value_percent, na.rm = TRUE),
+              range_percent = paste0(signif(min_percent, 4), " to ", signif(max_percent, 4)),
+              .groups = "drop"
+            ) %>%
+            arrange(normalization, sample_type, p_metric)
+
+          p_vector_values <- sample_point_base %>%
+            mutate(
+              p_metric = factor(paste0("p_", metric), levels = metric_p_reads),
+              metric_label = palette_label[as.character(p_metric)]
+            ) %>%
+            select(
+              normalization = all_of(x_axis_group),
+              sample_type = all_of(plot_group),
+              temperature = all_of(x_facet_group),
+              sample_name,
+              p_metric,
+              metric_label,
+              point_value_percent,
+              point_value_reads,
+              sample_fastq_reads
+            ) %>%
+            arrange(normalization, sample_type, temperature, p_metric, sample_name)
+
+          p_vector_values_wide <- sample_point_base %>%
+            mutate(
+              p_metric = paste0("p_", metric)
+            ) %>%
+            select(
+              normalization = all_of(x_axis_group),
+              sample_type = all_of(plot_group),
+              temperature = all_of(x_facet_group),
+              sample_name,
+              p_metric,
+              point_value_percent
+            ) %>%
+            pivot_wider(
+              names_from = p_metric,
+              values_from = point_value_percent,
+              values_fn = ~ .x[[1]]
+            ) %>%
+            arrange(normalization, sample_type, temperature, sample_name)
+
+          p_vector_test_base <- sample_point_base %>%
+            mutate(
+              sample_type = factor(.data[[plot_group]], levels = plot_group_order),
+              normalization = factor(.data[[x_axis_group]], levels = x_axis_group_order),
+              p_metric = factor(paste0("p_", metric), levels = metric_p_reads),
+              metric_label = palette_label[as.character(p_metric)]
+            ) %>%
+            select(sample_type, normalization, p_metric, metric_label, point_value_percent)
+
+          run_percent_test <- function(df) {
+            normalize_decimal_numeric <- function(x) {
+              if (is.na(x)) return(NA_real_)
+              as.numeric(format(unname(x)[1], scientific = FALSE, trim = TRUE, digits = 15))
+            }
+            norm_levels <- as.character(unique(df$normalization))
+            if (length(norm_levels) != 2) {
+              return(tibble(
+                group_1 = NA_character_,
+                group_2 = NA_character_,
+                n_group_1 = NA_integer_,
+                n_group_2 = NA_integer_,
+                mean_group_1 = NA_real_,
+                mean_group_2 = NA_real_,
+                statistic = NA_real_,
+                p_value = NA_real_
+              ))
+            }
+
+            group_1 <- norm_levels[1]
+            group_2 <- norm_levels[2]
+            values_1 <- df %>% filter(normalization == group_1) %>% pull(point_value_percent)
+            values_2 <- df %>% filter(normalization == group_2) %>% pull(point_value_percent)
+
+            test_tbl <- tryCatch(
+              {
+                tidy_test_result(t.test(point_value_percent ~ normalization, data = df, var.equal = FALSE))
+              },
+              error = function(e) tibble(p.value = NA_real_, statistic = NA_real_)
+            )
+
+            tibble(
+              group_1 = group_1,
+              group_2 = group_2,
+              n_group_1 = length(values_1),
+              n_group_2 = length(values_2),
+              mean_group_1 = mean(values_1, na.rm = TRUE),
+              mean_group_2 = mean(values_2, na.rm = TRUE),
+              statistic = normalize_decimal_numeric(test_tbl$statistic[[1]]),
+              p_value = normalize_decimal_numeric(test_tbl$p.value[[1]])
+            )
+          }
+
+          p_vector_tests_by_type <- p_vector_test_base %>%
+            group_by(sample_type, p_metric, metric_label) %>%
+            group_modify(~ run_percent_test(.x)) %>%
+            ungroup() %>%
+            arrange(sample_type, p_metric) %>%
+            rename(
+              welch_statistic = statistic,
+              welch_p_value = p_value
+            )
+
+          round_p_value <- function(x) {
+            ifelse(
+              is.na(x),
+              NA_real_,
+              round(x, 8)
+            )
+          }
+
+          round_p_value_columns <- function(df) {
+            p_cols <- grepl("(^p$)|(^p_value$)|(_p_value$)|(\\.p\\.value$)|(^p\\.value$)|(^adj\\.p\\.value$)|(^anova\\.p\\.value$)",
+              names(df), ignore.case = TRUE)
+            if (any(p_cols)) {
+              df[p_cols] <- lapply(df[p_cols], function(col) {
+                if (is.numeric(col)) round_p_value(col) else col
+              })
+            }
+            df
+          }
+
+          p_vector_tests_by_norm <- p_vector_test_base %>%
+            group_by(p_metric, metric_label) %>%
+            group_modify(~ run_percent_test(.x)) %>%
+            ungroup() %>%
+            arrange(p_metric) %>%
+            rename(
+              welch_statistic = statistic,
+              welch_p_value = p_value
+            ) %>%
+            mutate(
+              welch_p_value = round_p_value(welch_p_value)
+            ) %>%
+            as_tibble() %>%
+            mutate(across(everything(), ~ if (is.factor(.x)) as.character(.x) else .x)) %>%
+            as.data.frame(stringsAsFactors = FALSE)
+          
+          sample_point_export <- build_boxplot_export(
+            df = sample_point_base,
+            x_axis_group = x_axis_group,
+            x_facet_group = x_facet_group,
+            y_facet_group = "metric",
+            extra_groups = plot_group,
+            value_col = "point_value_percent",
+            value_name = "point_value_percent"
+          ) %>%
+            left_join(
+              build_boxplot_export(
+                df = sample_point_base,
+                x_axis_group = x_axis_group,
+                x_facet_group = x_facet_group,
+                y_facet_group = "metric",
+                extra_groups = plot_group,
+                value_col = "point_value_reads",
+                value_name = "point_value_reads"
+              ) %>%
+                select(-panel, -boxplot),
+              by = c("x_faceting", "y_faceting", "x_axis", plot_group, "sample_name")
+            ) %>%
+            left_join(
+              build_boxplot_export(
+                df = sample_point_base,
+                x_axis_group = x_axis_group,
+                x_facet_group = x_facet_group,
+                y_facet_group = "metric",
+                extra_groups = plot_group,
+                value_col = "sample_fastq_reads",
+                value_name = "sample_fastq_reads"
+              ) %>%
+                select(-panel, -boxplot),
+              by = c("x_faceting", "y_faceting", "x_axis", plot_group, "sample_name")
+            )
+          
+          boxplot_export <- bind_rows(
+            build_boxplot_export(
+              df = df_percentage %>%
+                select(sample_name, any_of(c(plot_group, x_facet_group, "metric", x_axis_group)), value),
+              x_axis_group = x_axis_group,
+              x_facet_group = x_facet_group,
+              y_facet_group = "metric",
+              extra_groups = plot_group,
+              value_col = "value",
+              value_name = "boxplot_value"
+            ),
+            build_boxplot_export(
+              df = df_fastq %>%
+                select(sample_name, any_of(c(plot_group, x_facet_group, "metric", x_axis_group)), relative_fastq_reads) %>%
+                rename(value = relative_fastq_reads),
+              x_axis_group = x_axis_group,
+              x_facet_group = x_facet_group,
+              y_facet_group = "metric",
+              extra_groups = plot_group,
+              value_col = "value",
+              value_name = "boxplot_value"
+            )
+          )
+          
+          cumulative_export_sample <- build_boxplot_export(
+            df = df_plot %>%
+              filter(metric %in% c(metric_cumulative)) %>%
+              mutate(metric = gsub("c_", "", metric)) %>%
+              mutate(metric = ifelse(metric == "chimerireads", "chimeric_reads", metric)) %>%
+              select(sample_name, any_of(c(plot_group, x_facet_group, "metric", x_axis_group)), value) %>%
+              distinct(),
+            x_axis_group = x_axis_group,
+            x_facet_group = x_facet_group,
+            y_facet_group = "metric",
+            extra_groups = plot_group,
+            value_col = "value",
+            value_name = "cumulative_value"
+          ) %>%
+            select(-panel, -boxplot)
+          
+          cumulative_export_group <- build_group_value_export(
+            df = df_cumulative_summary %>%
+              select(any_of(c(plot_group, x_facet_group, "metric", x_axis_group)), mean_value),
+            x_axis_group = x_axis_group,
+            x_facet_group = x_facet_group,
+            y_facet_group = "metric",
+            extra_groups = plot_group,
+            value_col = "mean_value",
+            value_name = "col_value"
+          ) %>%
+            select(-panel, -boxplot)
+          
+          plot_export_list[[t]] <- boxplot_export %>%
+            left_join(
+              sample_point_export,
+              by = c("panel", "boxplot", "x_faceting", "y_faceting", "x_axis", plot_group, "sample_name")
+            ) %>%
+            left_join(
+              cumulative_export_sample,
+              by = c("x_faceting", "y_faceting", "x_axis", plot_group, "sample_name")
+            ) %>%
+            left_join(
+              cumulative_export_group,
+              by = c("x_faceting", "y_faceting", "x_axis", plot_group)
+            )
+          
+          fill_breaks <- c("cumulative", t)
+          
+          linetype_legend_df <- tibble(
+            sig_group = factor(
+              c("sig", "fully_separated", "ns"),
+              levels = c("sig", "fully_separated", "ns")
+            ),
+            x_dummy = factor(x_axis_group_order[1], levels = x_axis_group_order),
+            xend_dummy = factor(x_axis_group_order[1], levels = x_axis_group_order),
+            y_dummy = 0,
+            yend_dummy = 0
+          )
+          
+          
           p <- ggplot(df_percentage, aes(x = get(x_axis_group), y = value, color = get(x_axis_group))) +
+            
+            #................ adding cumulative/remaining reads to legend .................# 
+            
+            geom_point(data = df_cumulative_summary,
+                       aes(x = get(x_axis_group), y = mean_value,fill = cumulative),
+                       alpha = 0,
+                       show.legend = TRUE
+            ) +
+            
+            #........................ adding sample_type to legend ........................# 
+            
+            geom_point(
+              aes(fill = get(plot_group)),
+              alpha = 0,
+              show.legend = TRUE
+            ) +
+            
             geom_col(
               data = df_cumulative_summary,
-              aes(x = get(x_axis_group), y = mean_value, color = cumulative, fill = cumulative)
+              aes(x = get(x_axis_group), y = mean_value,),
+              fill = palette_color['cumulative'],color = palette_color['cumulative']
+              #,size=7
             ) +
             geom_boxplot(
               data        = df_percentage %>% filter(metric != "fastq_reads"),
@@ -598,7 +1014,9 @@ for (plot_set in plot_set_order) {
               )
             ) +
             labs(title = paste(taxa_levs, t, smg), x = "", y = "")
-          
+          p
+          gPlot(p)
+          q=gPlot(p)
           #..............................................................................#
           message("605 # Add p-values if 2 levels")
           #..............................................................................#
@@ -608,20 +1026,28 @@ for (plot_set in plot_set_order) {
             df_plot2 <- df_percentage %>%
               mutate(p_label      = paste0("p = ", format(p_value, scientific = TRUE, digits = 3))) %>%
               mutate(significance = ifelse(p_value < .05, "sig", "ns")) %>%
+              
+              mutate(
+                comparison_characteristic = case_when(
+                  p_value < .05 ~ "sig",
+                  coalesce(fully_separated, FALSE) ~ "fully_separated",
+                  TRUE ~ "ns"
+                )) %>%
+              
               mutate(p_label      = ifelse(metric == "fastq_reads", "", p_label)) %>%
-              mutate(p_label_colored = paste0("<span style='color:", palette_color[significance], "'>", p_label, "</span>")) %>%
               group_by(metric, across(any_of(plot_group))) %>%
               mutate(y_p_label = 70) %>%
               ungroup() %>%
               mutate(!!x_axis_group  := factor(.data[[x_axis_group]],  levels = x_axis_group_order)) %>%
               mutate(!!x_facet_group := factor(.data[[x_facet_group]], levels = x_facet_group_order)) %>%
               mutate(!!plot_group    := factor(.data[[plot_group]],    levels = plot_group_order)) %>%
+              filter(metric!='fastq_reads') %>% 
               ungroup()
             
-            p <- p +
-              geom_richtext(
+            p <- q +
+              geom_label(
                 data        = df_plot2 %>% filter(significance == "sig"),
-                aes(x = 1.5, y = y_p_label, label = p_label_colored),
+                aes(x = 1.5, y = y_p_label, label = p_label),
                 color       = "red",
                 inherit.aes = FALSE,
                 fill        = scales::alpha("gray95", 0.1),
@@ -631,7 +1057,7 @@ for (plot_set in plot_set_order) {
                 size        = p_value_size,
                 fontface    = "bold"
               ) +
-              geom_richtext(
+              geom_label(
                 data        = df_plot2 %>% filter(significance == "ns" | is.na(significance)),
                 aes(x = 1.5, y = y_p_label, label = p_label),
                 color       = "gray50",
@@ -643,6 +1069,7 @@ for (plot_set in plot_set_order) {
                 size        = p_value_size,
                 fontface    = "bold"
               )
+            
           }
           
           plot_list[[t]] <- gPlot(p)
@@ -657,6 +1084,52 @@ for (plot_set in plot_set_order) {
         
         combined_plot <- wrap_plots(plot_list, ncol = 1) +
           plot_annotation(tag_levels = "A", theme = theme_plot)
+        
+        plot_export_df <- bind_rows(plot_export_list) %>%
+          arrange(panel, x_axis, sample_name)
+        
+        summary_sheets <- list(
+          plot_data = plot_export_df,
+          vector_by_norm = vector_summary_by_normalization,
+          vector_by_norm_type = vector_summary_by_normalization_sample_type,
+          p_vector_values = p_vector_values,
+          p_vector_values_wide = p_vector_values_wide,
+          p_vector_tests_by_norm = p_vector_tests_by_norm,
+          p_vector_tests_by_type = p_vector_tests_by_type
+        )
+        normalize_list_column <- function(col) {
+          if (!is.list(col)) return(col)
+          all_numeric_like <- all(vapply(col, function(x) {
+            length(x) == 0 || all(is.na(x)) || is.numeric(x)
+          }, logical(1)))
+          if (all_numeric_like) {
+            return(vapply(col, function(x) {
+              if (length(x) == 0 || all(is.na(x))) {
+                NA_real_
+              } else {
+                as.numeric(x[[1]])
+              }
+            }, numeric(1)))
+          }
+          vapply(col, function(x) {
+            if (length(x) == 0 || all(is.na(x))) {
+              NA_character_
+            } else {
+              paste(as.character(x), collapse = ", ")
+            }
+          }, character(1))
+        }
+        summary_sheets <- lapply(summary_sheets, function(x) {
+          x %>%
+            as_tibble() %>%
+            mutate(across(where(is.list), normalize_list_column)) %>%
+            mutate(across(everything(), ~ if (is.factor(.x)) as.character(.x) else .x)) %>%
+            round_p_value_columns()
+        })
+        write_formatted_workbook(
+          summary_sheets,
+          file.path(output_data, summary_file_name)
+        )
         
         plot_width  <- 18
         plot_height <- 18
